@@ -6,26 +6,33 @@
     <title>스케치북 마스터 퀴즈 & 리더보드</title>
     
     <!-- Chosen Palette: Sketchbook Pro Elite (Slate-50, Indigo-600, White, Slate-950) -->
-    <!-- Application Structure Plan: 
-         1. Layout Strategy: Responsive split screen. The left side (40%) hosts the real-time Leaderboard for constant motivation. The right side (60%) is the active Quiz Zone.
-         2. Section Introductions: Each major area begins with a clear explanation of its purpose to guide the user.
-         3. Question Design: 10 visual questions using specific Postimg URLs. Questions reference technical UI positions (corners, specific buttons) as requested.
-         4. Interaction: Logic is handled via Vanilla JS, updating state and Firestore documents.
-         5. Admin Control: Hidden reset on the pencil icon with password 'reset1234'.
-    -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
-
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, doc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sketchbook-master-ultimate';
+        // =========================================================
+        // [사용자님의 Firebase 설정 적용 완료]
+        // image_75465a.jpg에 있는 정보를 바탕으로 입력했습니다.
+        // =========================================================
+        const myFirebaseConfig = {
+            apiKey: "AIzaSyDFesJaSSfPLtlG9gRu-nAkPLiY_Ts2yQg",
+            authDomain: "sketchbook-quiz.firebaseapp.com",
+            projectId: "sketchbook-quiz",
+            storageBucket: "sketchbook-quiz.firebasestorage.app",
+            messagingSenderId: "1071967008197",
+            appId: "1:1071967008197:web:9f3009a8b281d6400147ac",
+            measurementId: "G-BSM6H4LRC3"
+        };
+
+        // 이 환경의 변수가 있으면 사용하고, 없으면 사용자님의 설정을 사용합니다.
+        let firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config) 
+            ? JSON.parse(__firebase_config) 
+            : myFirebaseConfig;
+
+        // 고유한 App ID 설정 (리더보드 충돌 방지)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sketchbook-master-final-v10';
 
         window.appState = {
             user: null,
@@ -33,30 +40,42 @@
             currentScore: 0,
             startTime: null,
             totalTime: 0,
-            leaderboard: []
+            leaderboard: [],
+            isDbConnected: false
         };
 
-        const initAuth = async () => {
+        let db, auth;
+
+        const initFirebase = async () => {
+            if (!firebaseConfig.apiKey) return;
             try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                // 학생들을 위한 자동 익명 로그인
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
+                
+                onAuthStateChanged(auth, (user) => {
+                    window.appState.user = user;
+                    if (user) {
+                        window.appState.isDbConnected = true;
+                        loadLeaderboard();
+                    }
+                });
             } catch (error) {
-                console.error("Auth error:", error);
+                console.error("Firebase 연결 오류:", error);
             }
         };
 
-        onAuthStateChanged(auth, (user) => {
-            window.appState.user = user;
-            if (user) loadLeaderboard();
-        });
-
-        initAuth();
+        initFirebase();
 
         function loadLeaderboard() {
-            if (!window.appState.user) return;
+            if (!db || !window.appState.user) return;
             const leaderboardCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
             onSnapshot(leaderboardCol, (snapshot) => {
                 const data = [];
@@ -67,91 +86,63 @@
                 }).slice(0, 10);
                 window.appState.leaderboard = sorted;
                 renderLeaderboard();
-            }, (error) => console.error("Leaderboard error:", error));
+            }, (err) => console.error("리더보드 로딩 오류:", err));
         }
 
         window.submitScore = async (score, time) => {
-            if (!window.appState.user || !window.appState.userName) return;
-            const leaderboardCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
-            await addDoc(leaderboardCol, {
-                name: window.appState.userName,
-                score: score,
-                time: time,
-                timestamp: Date.now()
-            });
+            if (!db || !window.appState.userName) return;
+            try {
+                const leaderboardCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+                await addDoc(leaderboardCol, {
+                    name: window.appState.userName,
+                    score: score,
+                    time: time,
+                    timestamp: Date.now()
+                });
+            } catch (e) { console.error("점수 저장 실패:", e); }
         };
 
         window.resetLeaderboardData = async (password) => {
-            if (password !== "reset1234") {
-                showToast("비밀번호가 올바르지 않습니다.", "error");
-                return;
-            }
+            if (password !== "reset1234") { showToast("비밀번호가 틀렸습니다.", "error"); return; }
+            if (!db) return;
             try {
                 const leaderboardCol = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
                 const snapshot = await getDocs(leaderboardCol);
                 const deletePromises = snapshot.docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'leaderboard', d.id)));
                 await Promise.all(deletePromises);
-                showToast("데이터가 초기화되었습니다.", "success");
+                showToast("데이터 초기화 완료!", "success");
                 closeResetModal();
-            } catch (error) {
-                showToast("초기화 실패.", "error");
-            }
+            } catch (error) { showToast("초기화 중 오류 발생", "error"); }
         };
     </script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
-        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; }
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; }
         .quiz-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
         .quiz-card:hover:not(:disabled) { transform: translateY(-3px); border-color: #6366f1; background-color: #f5f3ff; }
-        .modal-overlay {
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(8px);
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            align-items: center;
-            justify-content: center;
-        }
+        .modal-overlay { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); display: none; position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; }
         .modal-overlay.active { display: flex; }
-        .visual-container {
-            width: 100%;
-            height: 220px;
-            background-color: #ffffff;
-            border-radius: 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid #e2e8f0;
-            margin-bottom: 1.5rem;
-            overflow: hidden;
-            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
-        }
-        .visual-container img {
-            max-height: 90%;
-            max-width: 90%;
-            object-fit: contain;
-        }
+        .visual-box { width: 100%; height: 230px; background-color: #fff; border-radius: 1.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #e2e8f0; margin-bottom: 1.5rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05); }
+        .visual-box img { max-height: 90%; max-width: 90%; object-fit: contain; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col text-slate-900 overflow-x-hidden">
+<body class="min-h-screen flex flex-col">
 
     <!-- Admin Modal -->
     <div id="reset-modal" class="modal-overlay">
-        <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm border border-slate-200">
-            <h3 class="text-xl font-black text-slate-800 mb-2 text-center">전체 기록 초기화</h3>
-            <p class="text-slate-500 text-sm mb-6 text-center">관리자 비밀번호를 입력해 주세요.</p>
-            <input type="password" id="admin-pw" placeholder="비밀번호" class="w-full px-5 py-3 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-rose-500 focus:outline-none mb-4 font-bold text-center">
+        <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-full max-w-sm text-center border border-slate-200">
+            <h3 class="text-xl font-black mb-4 text-slate-800">기록 초기화</h3>
+            <input type="password" id="admin-pw" placeholder="비밀번호" class="w-full px-5 py-3 rounded-xl border-2 border-slate-100 mb-6 text-center font-bold focus:border-indigo-500 focus:outline-none">
             <div class="flex gap-2">
-                <button onclick="closeResetModal()" class="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-colors">취소</button>
-                <button onclick="confirmReset()" class="flex-1 py-3 font-bold bg-rose-500 text-white rounded-xl hover:bg-rose-600 shadow-lg shadow-rose-100">초기화 실행</button>
+                <button onclick="closeResetModal()" class="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">취소</button>
+                <button onclick="confirmReset()" class="flex-1 py-3 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 transition-colors">데이터 삭제</button>
             </div>
         </div>
     </div>
 
     <!-- Toast UI -->
-    <div id="system-toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 rounded-full shadow-xl font-bold text-sm transform -translate-y-20 transition-transform duration-300 hidden">
+    <div id="system-toast" class="fixed top-10 left-1/2 -translate-x-1/2 z-[110] px-8 py-3 rounded-full shadow-2xl font-bold text-sm hidden transform transition-all duration-300">
         <span id="toast-text"></span>
     </div>
 
@@ -159,7 +150,7 @@
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
                 <button onclick="openResetModal()" class="text-2xl hover:rotate-12 transition-transform cursor-pointer">✏️</button>
-                <h1 class="font-black text-xl tracking-tight text-slate-800 uppercase italic">Sketchbook Pro Master</h1>
+                <h1 class="font-black text-xl text-slate-900 tracking-tight uppercase italic">Sketchbook Pro Master</h1>
             </div>
             <div id="user-info" class="hidden text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-full border border-indigo-100">
                 <span id="display-name"></span>
@@ -169,47 +160,39 @@
 
     <main class="flex-grow max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col md:flex-row gap-8">
         
-        <!-- Area 1: Hall of Fame (Leaderboard) -->
+        <!-- Area 1: Leaderboard -->
         <section class="w-full md:w-5/12 lg:w-4/12 flex flex-col">
             <div class="bg-white rounded-[2rem] shadow-lg border border-slate-200 overflow-hidden sticky top-24">
-                <div class="bg-slate-900 p-6 text-white flex flex-col items-center">
+                <div class="bg-slate-900 p-6 text-white text-center">
                     <div class="text-4xl mb-2">🏆</div>
                     <h3 class="text-xl font-black">명예의 전당</h3>
-                    <p class="text-slate-400 text-[10px] mt-1 uppercase tracking-widest font-bold">Artist Ranking - Top 10</p>
+                    <p class="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Artist Ranking - Top 10</p>
                 </div>
-                
-                <div class="p-4">
-                    <p class="text-xs text-slate-500 mb-4 px-2 leading-relaxed">
-                        이 영역은 모든 사용자의 퀴즈 성적을 실시간으로 집계하여 보여줍니다. 높은 점수와 빠른 소요 시간으로 1위의 자리에 도전해 보세요!
-                    </p>
-                    <div id="leaderboard-list" class="space-y-2">
-                        <!-- Rankings via JS -->
-                    </div>
-                    <div id="no-data" class="hidden py-24 text-center text-slate-300 italic">기록을 기다리고 있습니다...</div>
+                <div class="p-5">
+                    <p class="text-xs text-slate-500 mb-5 leading-relaxed text-center italic">"누가 가장 빠르고 정확하게 도구를 이해하고 있나요?"</p>
+                    <div id="leaderboard-list" class="space-y-2"></div>
+                    <div id="no-data" class="hidden py-24 text-center text-slate-300 italic text-sm">기록을 기다리고 있습니다...</div>
                 </div>
             </div>
         </section>
 
-        <!-- Area 2: Quiz Application Area -->
-        <section id="quiz-area-root" class="w-full md:w-7/12 lg:w-8/12 flex flex-col min-h-[650px]">
+        <!-- Area 2: Quiz Engine -->
+        <section id="quiz-area-root" class="w-full md:w-7/12 lg:w-8/12 flex flex-col min-h-[680px]">
             
-            <!-- 1. Entry View -->
+            <!-- Entry View -->
             <div id="entry-view" class="bg-white p-10 md:p-16 rounded-[2.5rem] shadow-xl border border-slate-200 flex-grow flex flex-col justify-center items-center">
-                <div class="text-center mb-10">
+                <div class="text-center mb-12">
                     <div class="w-24 h-24 bg-slate-900 text-white rounded-3xl flex items-center justify-center text-5xl mx-auto mb-8 shadow-2xl">⚡</div>
                     <h2 class="text-4xl font-black text-slate-900 tracking-tight">스케치북 마스터 퀴즈</h2>
-                    <p class="text-slate-500 mt-4 leading-relaxed text-lg font-medium">실제 툴바 이미지를 보고 기능을 맞춰보세요.<br>마스터의 영광에 도전할 준비가 되셨나요?</p>
+                    <p class="text-slate-500 mt-4 font-medium text-lg leading-relaxed">디지털 드로잉 도구의 숨겨진 기능을 마스터하세요!<br>이미지를 자세히 보고 정답을 맞춰보세요.</p>
                 </div>
                 <div class="w-full max-w-sm space-y-6">
-                    <input type="text" id="name-input" maxlength="10" placeholder="닉네임 입력" 
-                           class="w-full px-8 py-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-xl font-bold">
-                    <button onclick="startQuiz()" class="w-full bg-indigo-600 text-white font-black py-6 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all text-2xl">
-                        퀴즈 시작 🚀
-                    </button>
+                    <input type="text" id="name-input" maxlength="10" placeholder="닉네임 입력" class="w-full px-8 py-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-xl font-bold placeholder:text-slate-300 text-center">
+                    <button onclick="startQuiz()" class="w-full bg-indigo-600 text-white font-black py-6 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all text-2xl">퀴즈 시작 🚀</button>
                 </div>
             </div>
 
-            <!-- 2. Quiz View -->
+            <!-- Quiz View -->
             <div id="quiz-view" class="hidden bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl border border-slate-200 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-8 pb-6 border-b border-slate-100">
                     <div class="flex items-center gap-4">
@@ -217,127 +200,57 @@
                         <div class="flex items-center gap-2 text-indigo-600 font-mono font-black text-2xl" id="timer">00:00</div>
                     </div>
                     <div class="text-right">
-                        <span id="live-score" class="text-3xl font-black text-indigo-600 tabular-nums">0</span>
-                        <span class="text-[10px] text-slate-400 block font-black uppercase tracking-tighter">Points</span>
+                        <span id="live-score" class="text-3xl font-black text-indigo-600">0</span>
+                        <span class="text-[10px] text-slate-400 block font-black uppercase">Points</span>
                     </div>
                 </div>
 
                 <div class="flex-grow flex flex-col justify-center">
-                    <p class="text-xs text-indigo-600 font-bold mb-2 text-center uppercase tracking-widest">Interface Analysis</p>
-                    <h3 id="question-header" class="text-2xl md:text-3xl font-black leading-tight text-slate-800 mb-6 text-center"></h3>
-                    
-                    <!-- Question Image Area -->
-                    <div class="visual-container shadow-inner">
-                        <img id="question-img" src="" alt="Sketchbook Component">
+                    <h3 id="question-header" class="text-2xl md:text-3xl font-black leading-tight text-slate-800 mb-8 text-center"></h3>
+                    <div class="visual-box shadow-inner">
+                        <img id="question-img" src="" alt="Sketchbook Interface">
                     </div>
-                    
-                    <!-- Options Grid -->
-                    <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Choice Buttons -->
-                    </div>
+                    <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                 </div>
 
-                <div id="feedback" class="hidden p-6 rounded-3xl text-center font-black text-2xl mt-8 animate-bounce border-4 transition-all"></div>
+                <div id="feedback" class="hidden p-6 rounded-[2rem] text-center font-black text-2xl mt-8 animate-bounce border-4"></div>
             </div>
 
-            <!-- 3. Result View -->
+            <!-- Result View -->
             <div id="result-view" class="hidden bg-white p-12 rounded-[2.5rem] shadow-xl border border-slate-200 text-center flex-grow flex flex-col justify-center items-center">
-                <div class="text-9xl mb-10" id="result-emoji">🏆</div>
-                <h2 class="text-5xl font-black text-slate-900 mb-4">도전 종료!</h2>
-                <p class="text-slate-500 mb-12 font-bold text-xl" id="result-message"></p>
-                
-                <div class="grid grid-cols-2 gap-8 mb-12 max-md:grid-cols-1 max-w-md w-full">
+                <div class="text-9xl mb-10">🏅</div>
+                <h2 class="text-5xl font-black text-slate-900 mb-4">마스터 등극!</h2>
+                <div class="grid grid-cols-2 gap-8 mb-12 max-w-md w-full">
                     <div class="bg-indigo-50 p-8 rounded-[2rem] border-2 border-indigo-100">
-                        <span class="text-xs text-indigo-400 block uppercase font-black mb-2 tracking-widest text-center">Final Score</span>
-                        <span id="final-score" class="text-5xl font-black text-indigo-600 text-center block">0</span>
+                        <span id="final-score" class="text-5xl font-black text-indigo-600 block">0</span>
                     </div>
                     <div class="bg-slate-50 p-8 rounded-[2rem] border-2 border-slate-100">
-                        <span class="text-xs text-slate-400 block uppercase font-black mb-2 tracking-widest text-center">Time Taken</span>
-                        <span id="final-time" class="text-5xl font-black text-slate-800 text-center block">0s</span>
+                        <span id="final-time" class="text-5xl font-black text-slate-800 block">0s</span>
                     </div>
                 </div>
-
-                <button onclick="resetApp()" class="w-full max-w-sm bg-slate-900 text-white font-black py-6 rounded-2xl hover:bg-black transition-all text-2xl shadow-xl shadow-slate-200">
-                    재도전하기 🔄
-                </button>
+                <button onclick="resetApp()" class="w-full max-w-sm bg-slate-900 text-white font-black py-6 rounded-2xl hover:bg-black transition-all text-2xl shadow-xl shadow-slate-200">다시 도전하기 🔄</button>
             </div>
-
         </section>
     </main>
 
-    <footer class="py-10 text-center text-slate-400 text-[10px] font-black uppercase tracking-[0.5em]">
-        Sketchbook Pro Interactive Certification Module
-    </footer>
-
     <script>
+        // 퀴즈 데이터 세트
         const questions = [
-            {
-                header: "브러시 팔레트 옆에 스크롤의 기능은 무엇일까요?",
-                img: "https://i.postimg.cc/QCYZr8sr/seukeulinsyas-2026-03-08-194419.png",
-                o: ["브러시 크기 및 불투명도 조절", "브러시 종류 변경", "레이어 가시성 켜기/끄기", "캔버스 전체 저장"],
-                a: 0
-            },
-            {
-                header: "이것의 기능은 무엇일까요?",
-                img: "https://i.postimg.cc/nrPgP3KR/seukeulinsyas-2026-03-08-194246.png",
-                o: ["선을 매끄럽게 자동 보정(예측 스트로크)", "선을 점선으로 그리기", "선의 색상을 자동으로 변경", "선 끝부분을 뭉툭하게 만들기"],
-                a: 0
-            },
-            {
-                header: "이것의 기능은 무엇일까요?",
-                img: "https://i.postimg.cc/vB8K8J30/seukeulinsyas-2026-03-08-194254.png",
-                o: ["외부 사진이나 이미지 가져오기(Import Image)", "그린 그림을 갤러리에 저장", "전체 레이어를 하나로 병합", "그림의 일부를 잘라내기"],
-                a: 0
-            },
-            {
-                header: "이것의 기능은 무엇일까요?",
-                img: "https://i.postimg.cc/7hdtVfwH/seukeulinsyas-2026-03-08-194301.png",
-                o: ["도형(직선, 원, 사각형) 그리기 가이드", "대칭 도구 활성화", "툴바 숨김 해제", "원근법 가이드 설정"],
-                a: 2
-            },
-            {
-                header: "더블 퍽의 기능이 아닌것은?",
-                img: "https://i.postimg.cc/jSz3Hx1B/seukeulinsyas-2026-03-08-194313.png",
-                o: ["브러시 사이즈와 투명도", "현재 브러시", "현재 레이어", "현재 색상"],
-                a: 2
-            },
-            {
-                header: "이것의 기능은 무엇일까요?",
-                img: "https://i.postimg.cc/k45jPx5M/seukeulinsyas-2026-03-08-194322.png",
-                o: ["해당 레이어 보이기/숨기기(가시성 조절)", "레이어 편집 잠금", "레이어 모든 내용 삭제", "새 레이어 추가하기"],
-                a: 0
-            },
-            {
-                header: "오른쪽 상단을 두번 탭하는 기능은?",
-                img: "https://i.postimg.cc/QC2S7wkz/seukeulinsyas-2026-03-08-194330.png",
-                o: ["그림의 위치 및 크기 변형", "화면 맞춤", "캔버스 전체 해상도 조절", "화면 확대/축소 잠금"],
-                a: 1
-            },
-            {
-                header: "이 것은 'undo' 기능입니다. 탭하는 위치는?",
-                img: "https://i.postimg.cc/dQgKn0W1/seukeulinsyas-2026-03-08-194340.png",
-                o: ["왼쪽 하단", "왼쪽 상단", "오른쪽 상단", "오른쪽 하단"],
-                a: 0
-            },
-            {
-                header: "이 모양은 무엇일까요?",
-                img: "https://i.postimg.cc/wjQ86Q9J/seukeulinsyas-2026-03-08-194509.png",
-                o: ["마킹 메뉴", "더블 퍽", "색상 편집기", "툴바"],
-                a: 0
-            },
-            {
-                header: "여기서 할 수 없는 기능은?",
-                img: "https://i.postimg.cc/XJht22ks/seukeulinsyas-2026-03-08-194238.png",
-                o: ["새 스케치 열기", "파일 불러오고 내보내기", "브러시 즐겨찾기", "펜 모드 변경"],
-                a: 2
-            }
+            { header: "브러시 팔레트 옆에 스크롤의 기능은 무엇일까요?", img: "https://i.postimg.cc/QCYZr8sr/seukeulinsyas-2026-03-08-194419.png", o: ["브러시 크기 및 불투명도 조절", "브러시 종류 변경", "레이어 가시성 켜기/끄기", "캔버스 전체 저장"], a: 0 },
+            { header: "이것의 기능은 무엇일까요?", img: "https://i.postimg.cc/nrPgP3KR/seukeulinsyas-2026-03-08-194246.png", o: ["선을 매끄럽게 자동 보정(예측 스트로크)", "선을 점선으로 그리기", "선의 색상을 자동으로 변경", "선 끝부분을 뭉툭하게 만들기"], a: 0 },
+            { header: "이것의 기능은 무엇일까요?", img: "https://i.postimg.cc/vB8K8J30/seukeulinsyas-2026-03-08-194254.png", o: ["외부 사진이나 이미지 가져오기(Import Image)", "그린 그림을 갤러리에 저장", "전체 레이어를 하나로 병합", "그림의 일부를 잘라내기"], a: 0 },
+            { header: "이것의 기능은 무엇일까요?", img: "https://i.postimg.cc/7hdtVfwH/seukeulinsyas-2026-03-08-194301.png", o: ["도형(직선, 원, 사각형) 그리기 가이드", "대칭 도구 활성화", "툴바 숨김 해제", "원근법 가이드 설정"], a: 2 },
+            { header: "더블 퍽의 기능이 아닌것은?", img: "https://i.postimg.cc/jSz3Hx1B/seukeulinsyas-2026-03-08-194313.png", o: ["브러시 사이즈와 투명도", "현재 브러시", "현재 레이어", "현재 색상"], a: 2 },
+            { header: "이것의 기능은 무엇일까요?", img: "https://i.postimg.cc/k45jPx5M/seukeulinsyas-2026-03-08-194322.png", o: ["해당 레이어 보이기/숨기기(가시성 조절)", "레이어 편집 잠금", "레이어 모든 내용 삭제", "새 레이어 추가하기"], a: 0 },
+            { header: "오른쪽 상단을 두번 탭하는 기능은?", img: "https://i.postimg.cc/QC2S7wkz/seukeulinsyas-2026-03-08-194330.png", o: ["그림의 위치 및 크기 변형", "화면 맞춤", "캔버스 전체 해상도 조절", "화면 확대/축소 잠금"], a: 1 },
+            { header: "이 것은 'undo' 기능입니다. 탭하는 위치는?", img: "https://i.postimg.cc/dQgKn0W1/seukeulinsyas-2026-03-08-194340.png", o: ["왼쪽 하단", "왼쪽 상단", "오른쪽 상단", "오른쪽 하단"], a: 0 },
+            { header: "이 모양은 무엇일까요?", img: "https://i.postimg.cc/wjQ86Q9J/seukeulinsyas-2026-03-08-194509.png", o: ["마킹 메뉴", "더블 퍽", "색상 편집기", "툴바"], a: 0 },
+            { header: "여기서 할 수 없는 기능은?", img: "https://i.postimg.cc/XJht22ks/seukeulinsyas-2026-03-08-194238.png", o: ["새 스케치 열기", "파일 불러오고 내보내기", "브러시 즐겨찾기", "펜 모드 변경"], a: 2 }
         ];
 
-        let currentQIndex = 0;
-        let score = 0;
-        let timerInterval = null;
+        let currentQIndex = 0, score = 0, timerInterval = null;
 
-        function startQuiz() {
+        window.startQuiz = function() {
             const name = document.getElementById('name-input').value.trim();
             if (!name) return;
             window.appState.userName = name;
@@ -348,34 +261,26 @@
             window.appState.startTime = Date.now();
             startTimer();
             loadQuestion();
-        }
+        };
 
         function startTimer() {
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 const elapsed = Math.floor((Date.now() - window.appState.startTime) / 1000);
-                const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-                const secs = String(elapsed % 60).padStart(2, '0');
-                document.getElementById('timer').textContent = `${mins}:${secs}`;
+                document.getElementById('timer').textContent = `${String(Math.floor(elapsed/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
             }, 1000);
         }
 
         function loadQuestion() {
             const q = questions[currentQIndex];
-            document.getElementById('q-progress').textContent = `Q ${currentQIndex + 1}/${questions.length}`;
+            document.getElementById('q-progress').textContent = `Q ${currentQIndex + 1}/10`;
             document.getElementById('question-header').textContent = q.header;
             document.getElementById('question-img').src = q.img;
-            
-            const grid = document.getElementById('options-grid');
-            grid.innerHTML = '';
-            
-            // Shuffling options for competitive balance
-            const shuffled = q.o.map((text, i) => ({ text, isCorrect: i === q.a }))
-                              .sort(() => Math.random() - 0.5);
-
+            const grid = document.getElementById('options-grid'); grid.innerHTML = '';
+            const shuffled = q.o.map((text, i) => ({ text, isCorrect: i === q.a })).sort(() => Math.random() - 0.5);
             shuffled.forEach((opt) => {
                 const btn = document.createElement('button');
-                btn.className = "quiz-card bg-white border-2 border-slate-100 p-6 rounded-2xl text-left font-bold text-slate-700 shadow-sm hover:border-indigo-400 hover:bg-indigo-50 transition-all text-lg";
+                btn.className = "quiz-card bg-white border-2 border-slate-100 p-6 rounded-2xl text-left font-bold text-slate-700 shadow-sm transition-all text-lg";
                 btn.textContent = opt.text;
                 btn.onclick = () => handleAnswer(opt.isCorrect, btn);
                 grid.appendChild(btn);
@@ -384,10 +289,8 @@
 
         function handleAnswer(isCorrect, btn) {
             const feedback = document.getElementById('feedback');
-            const btns = document.querySelectorAll('.quiz-card');
-            btns.forEach(b => b.disabled = true);
+            document.querySelectorAll('.quiz-card').forEach(b => b.disabled = true);
             feedback.classList.remove('hidden');
-
             if (isCorrect) {
                 score += 100;
                 feedback.className = "p-6 rounded-[2rem] text-center font-black text-2xl mt-8 animate-bounce bg-emerald-50 text-emerald-600 border-emerald-400 border-4";
@@ -395,16 +298,13 @@
                 btn.classList.add('border-emerald-500', 'bg-emerald-50');
             } else {
                 feedback.className = "p-6 rounded-[2rem] text-center font-black text-2xl mt-8 bg-rose-50 text-rose-600 border-rose-400 border-4";
-                feedback.textContent = "WRONG! 😢";
+                feedback.textContent = "틀렸습니다! 😢";
                 btn.classList.add('border-rose-500', 'bg-rose-50');
             }
-
             document.getElementById('live-score').textContent = score;
             setTimeout(() => {
-                currentQIndex++;
-                feedback.classList.add('hidden');
-                if (currentQIndex < questions.length) loadQuestion();
-                else finishQuiz();
+                currentQIndex++; feedback.classList.add('hidden');
+                if (currentQIndex < 10) loadQuestion(); else finishQuiz();
             }, 1800);
         }
 
@@ -415,48 +315,41 @@
             document.getElementById('result-view').classList.remove('hidden');
             document.getElementById('final-score').textContent = score;
             document.getElementById('final-time').textContent = `${totalTime}s`;
-            const msg = document.getElementById('result-message');
-            if (score >= 900) msg.textContent = "완벽합니다! 당신은 진정한 스케치북 얼티밋 마스터입니다.";
-            else if (score >= 700) msg.textContent = "훌륭한 실력입니다! 조금만 더 공부하면 마스터가 될 수 있습니다.";
-            else msg.textContent = "수고하셨습니다! 실제 도구들을 앱에서 더 탐구해 보세요.";
-            await window.submitScore(score, totalTime);
+            if (window.appState.isDbConnected) await window.submitScore(score, totalTime);
         }
 
         function renderLeaderboard() {
             const list = document.getElementById('leaderboard-list');
             const noData = document.getElementById('no-data');
+            if (!list) return;
             list.innerHTML = '';
             if (window.appState.leaderboard.length === 0) { noData.classList.remove('hidden'); return; }
             noData.classList.add('hidden');
             window.appState.leaderboard.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = "flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm";
-                let badge = `<span class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-200 text-slate-500 font-black text-xs">${index + 1}</span>`;
-                if (index === 0) badge = `<span class="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-400 text-white font-black shadow-sm text-xs">1ST</span>`;
-                div.innerHTML = `<div class="flex items-center gap-4">${badge}<span class="font-bold text-slate-800">${item.name}</span></div><div class="text-right"><div class="font-black text-indigo-600 text-sm">${item.score}점</div><div class="text-[9px] text-slate-400 font-black uppercase tracking-tighter">${item.time}s</div></div>`;
+                div.innerHTML = `<div class="flex items-center gap-4"><span class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 font-black text-xs">${index + 1}</span><span class="font-bold">${item.name}</span></div><div class="text-right"><div class="font-black text-indigo-600 text-sm">${item.score}점</div><div class="text-[9px] text-slate-400 font-bold uppercase">${item.time}s</div></div>`;
                 list.appendChild(div);
             });
         }
 
-        function resetApp() {
-            currentQIndex = 0; score = 0;
-            document.getElementById('live-score').textContent = "0";
-            document.getElementById('result-view').classList.add('hidden');
-            document.getElementById('entry-view').classList.remove('hidden');
-            document.getElementById('user-info').classList.add('hidden');
-        }
-
-        function openResetModal() { document.getElementById('reset-modal').classList.add('active'); }
-        function closeResetModal() { document.getElementById('reset-modal').classList.remove('active'); }
-        function confirmReset() { const pw = document.getElementById('admin-pw').value; window.resetLeaderboardData(pw); }
+        window.resetApp = function() { location.reload(); };
+        window.openResetModal = function() { document.getElementById('reset-modal').classList.add('active'); };
+        window.closeResetModal = function() { document.getElementById('reset-modal').classList.remove('active'); };
+        window.confirmReset = function() { const pw = document.getElementById('admin-pw').value; window.resetLeaderboardData(pw); };
         function showToast(text, type) {
             const toast = document.getElementById('system-toast');
+            if (!toast) return;
             document.getElementById('toast-text').textContent = text;
-            toast.className = `fixed top-20 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 rounded-full shadow-xl font-bold text-sm transform transition-transform duration-300 ${type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`;
+            toast.className = `fixed top-10 left-1/2 -translate-x-1/2 z-[110] px-8 py-3 rounded-full shadow-2xl font-bold text-sm ${type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`;
             toast.classList.remove('hidden');
-            setTimeout(() => toast.style.transform = 'translate(-50%, 0)', 10);
-            setTimeout(() => { toast.style.transform = 'translate(-50%, -150px)'; setTimeout(() => toast.classList.add('hidden'), 500); }, 3000);
+            setTimeout(() => toast.classList.add('hidden'), 3000);
         }
     </script>
 </body>
 </html>
+ 
+  
+   
+
+ 
