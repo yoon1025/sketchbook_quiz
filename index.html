@@ -32,7 +32,7 @@
             : myFirebaseConfig;
 
         // 고유한 App ID 설정 (리더보드 충돌 방지)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sketchbook-master-final-v10';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sketchbook-master-final-v11';
 
         window.appState = {
             user: null,
@@ -120,14 +120,30 @@
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
         body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; }
         .quiz-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-        .quiz-card:hover:not(:disabled) { transform: translateY(-3px); border-color: #6366f1; background-color: #f5f3ff; }
+        .quiz-card:hover:not(:disabled) { transform: translateY(-2px); border-color: #6366f1; background-color: #f5f3ff; }
         .modal-overlay { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); display: none; position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; }
         .modal-overlay.active { display: flex; }
-        .visual-box { width: 100%; height: 230px; background-color: #fff; border-radius: 1.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #e2e8f0; margin-bottom: 1.5rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05); }
-        .visual-box img { max-height: 90%; max-width: 90%; object-fit: contain; }
+        /* 이미지 영역 크기 축소 */
+        .visual-box { width: 100%; height: 160px; background-color: #fff; border-radius: 1rem; display: flex; align-items: center; justify-content: center; border: 2px solid #e2e8f0; margin-bottom: 1rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05); }
+        .visual-box img { max-height: 85%; max-width: 85%; object-fit: contain; }
+        
+        /* 피드백 오버레이 스타일 */
+        #feedback-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.9);
+            z-index: 20;
+            align-items: center;
+            justify-content: center;
+            border-radius: 2.5rem;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .feedback-content { transform: scale(1.2); text-align: center; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col">
+<body class="min-h-screen flex flex-col overflow-hidden">
 
     <!-- Admin Modal -->
     <div id="reset-modal" class="modal-overlay">
@@ -135,8 +151,8 @@
             <h3 class="text-xl font-black mb-4 text-slate-800">기록 초기화</h3>
             <input type="password" id="admin-pw" placeholder="비밀번호" class="w-full px-5 py-3 rounded-xl border-2 border-slate-100 mb-6 text-center font-bold focus:border-indigo-500 focus:outline-none">
             <div class="flex gap-2">
-                <button onclick="closeResetModal()" class="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl">취소</button>
-                <button onclick="confirmReset()" class="flex-1 py-3 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 transition-colors">데이터 삭제</button>
+                <button onclick="closeResetModal()" class="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl text-sm">취소</button>
+                <button onclick="confirmReset()" class="flex-1 py-3 bg-rose-500 text-white rounded-xl font-bold hover:bg-rose-600 transition-colors text-sm">데이터 삭제</button>
             </div>
         </div>
     </div>
@@ -146,95 +162,101 @@
         <span id="toast-text"></span>
     </div>
 
-    <header class="bg-white border-b border-slate-200 py-4 px-6 sticky top-0 z-50 shadow-sm">
+    <header class="bg-white border-b border-slate-200 py-3 px-6 sticky top-0 z-50 shadow-sm">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
-                <button onclick="openResetModal()" class="text-2xl hover:rotate-12 transition-transform cursor-pointer">✏️</button>
-                <h1 class="font-black text-xl text-slate-900 tracking-tight uppercase italic">Sketchbook Pro Master</h1>
+                <button onclick="openResetModal()" class="text-xl hover:rotate-12 transition-transform cursor-pointer">✏️</button>
+                <h1 class="font-black text-lg text-slate-900 tracking-tight uppercase italic">Sketchbook Pro Master</h1>
             </div>
-            <div id="user-info" class="hidden text-sm font-bold text-indigo-600 bg-indigo-50 px-4 py-1.5 rounded-full border border-indigo-100">
+            <div id="user-info" class="hidden text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
                 <span id="display-name"></span>
             </div>
         </div>
     </header>
 
-    <main class="flex-grow max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col md:flex-row gap-8">
+    <main class="flex-grow max-w-7xl mx-auto w-full p-4 flex flex-col md:flex-row gap-6 overflow-hidden">
         
-        <!-- Area 1: Leaderboard -->
-        <section class="w-full md:w-5/12 lg:w-4/12 flex flex-col">
-            <div class="bg-white rounded-[2rem] shadow-lg border border-slate-200 overflow-hidden sticky top-24">
-                <div class="bg-slate-900 p-6 text-white text-center">
-                    <div class="text-4xl mb-2">🏆</div>
-                    <h3 class="text-xl font-black">명예의 전당</h3>
-                    <p class="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Artist Ranking - Top 10</p>
+        <!-- Area 1: Leaderboard (Left) -->
+        <section class="w-full md:w-4/12 lg:w-3/12 flex flex-col h-full overflow-hidden">
+            <div class="bg-white rounded-[1.5rem] shadow-lg border border-slate-200 overflow-hidden flex flex-col h-full max-h-[85vh]">
+                <div class="bg-slate-900 p-4 text-white text-center flex-shrink-0">
+                    <div class="text-2xl mb-1">🏆</div>
+                    <h3 class="text-lg font-black leading-none">명예의 전당</h3>
+                    <p class="text-slate-400 text-[9px] uppercase font-bold tracking-widest mt-1">Artist Ranking - Top 10</p>
                 </div>
-                <div class="p-5">
-                    <p class="text-xs text-slate-500 mb-5 leading-relaxed text-center italic">"누가 가장 빠르고 정확하게 도구를 이해하고 있나요?"</p>
+                <div class="p-4 overflow-y-auto flex-grow scrollbar-hide">
                     <div id="leaderboard-list" class="space-y-2"></div>
-                    <div id="no-data" class="hidden py-24 text-center text-slate-300 italic text-sm">기록을 기다리고 있습니다...</div>
+                    <div id="no-data" class="hidden py-12 text-center text-slate-300 italic text-xs">기록을 기다리고 있습니다...</div>
                 </div>
             </div>
         </section>
 
-        <!-- Area 2: Quiz Engine -->
-        <section id="quiz-area-root" class="w-full md:w-7/12 lg:w-8/12 flex flex-col min-h-[680px]">
+        <!-- Area 2: Quiz Engine (Right) -->
+        <section id="quiz-area-root" class="w-full md:w-8/12 lg:w-9/12 flex flex-col relative h-full">
             
-            <!-- Entry View -->
-            <div id="entry-view" class="bg-white p-10 md:p-16 rounded-[2.5rem] shadow-xl border border-slate-200 flex-grow flex flex-col justify-center items-center">
-                <div class="text-center mb-12">
-                    <div class="w-24 h-24 bg-slate-900 text-white rounded-3xl flex items-center justify-center text-5xl mx-auto mb-8 shadow-2xl">⚡</div>
-                    <h2 class="text-4xl font-black text-slate-900 tracking-tight">스케치북 마스터 퀴즈</h2>
-                    <p class="text-slate-500 mt-4 font-medium text-lg leading-relaxed">디지털 드로잉 도구의 숨겨진 기능을 마스터하세요!<br>이미지를 자세히 보고 정답을 맞춰보세요.</p>
+            <!-- 1. Entry View -->
+            <div id="entry-view" class="bg-white p-8 rounded-[2rem] shadow-xl border border-slate-200 flex-grow flex flex-col justify-center items-center">
+                <div class="text-center mb-8">
+                    <div class="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 shadow-xl">⚡</div>
+                    <h2 class="text-3xl font-black text-slate-900 tracking-tight">스케치북 마스터 퀴즈</h2>
+                    <p class="text-slate-500 mt-2 font-medium text-base">도구의 숨겨진 기능을 마스터하세요!</p>
                 </div>
-                <div class="w-full max-w-sm space-y-6">
-                    <input type="text" id="name-input" maxlength="10" placeholder="닉네임 입력" class="w-full px-8 py-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-xl font-bold placeholder:text-slate-300 text-center">
-                    <button onclick="startQuiz()" class="w-full bg-indigo-600 text-white font-black py-6 rounded-2xl hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all text-2xl">퀴즈 시작 🚀</button>
+                <div class="w-full max-w-sm space-y-4">
+                    <input type="text" id="name-input" maxlength="10" placeholder="닉네임 입력" class="w-full px-6 py-4 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-lg font-bold text-center">
+                    <button onclick="startQuiz()" class="w-full bg-indigo-600 text-white font-black py-4 rounded-xl hover:bg-indigo-700 shadow-lg transition-all text-xl">퀴즈 시작 🚀</button>
                 </div>
             </div>
 
-            <!-- Quiz View -->
-            <div id="quiz-view" class="hidden bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl border border-slate-200 flex-grow flex flex-col">
-                <div class="flex justify-between items-center mb-8 pb-6 border-b border-slate-100">
-                    <div class="flex items-center gap-4">
-                        <div class="bg-slate-900 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest" id="q-progress">Q 1/10</div>
-                        <div class="flex items-center gap-2 text-indigo-600 font-mono font-black text-2xl" id="timer">00:00</div>
+            <!-- 2. Quiz View -->
+            <div id="quiz-view" class="hidden bg-white p-6 rounded-[2rem] shadow-xl border border-slate-200 flex-grow flex flex-col relative overflow-hidden h-full max-h-[85vh]">
+                <!-- 피드백 오버레이 -->
+                <div id="feedback-overlay">
+                    <div class="feedback-content">
+                        <div id="feedback-emoji" class="text-7xl mb-4"></div>
+                        <div id="feedback-text" class="text-4xl font-black"></div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center mb-4 pb-4 border-b border-slate-50 flex-shrink-0">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-slate-900 text-white px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest" id="q-progress">Q 1/10</div>
+                        <div class="flex items-center gap-2 text-indigo-600 font-mono font-black text-xl" id="timer">00:00</div>
                     </div>
                     <div class="text-right">
-                        <span id="live-score" class="text-3xl font-black text-indigo-600">0</span>
-                        <span class="text-[10px] text-slate-400 block font-black uppercase">Points</span>
+                        <span id="live-score" class="text-2xl font-black text-indigo-600">0</span>
+                        <span class="text-[8px] text-slate-400 block font-black uppercase leading-none">Points</span>
                     </div>
                 </div>
 
-                <div class="flex-grow flex flex-col justify-center">
-                    <h3 id="question-header" class="text-2xl md:text-3xl font-black leading-tight text-slate-800 mb-8 text-center"></h3>
-                    <div class="visual-box shadow-inner">
-                        <img id="question-img" src="" alt="Sketchbook Interface">
+                <div class="flex-grow flex flex-col justify-center overflow-y-auto">
+                    <h3 id="question-header" class="text-xl md:text-2xl font-black leading-tight text-slate-800 mb-4 text-center"></h3>
+                    <div class="visual-box shadow-inner flex-shrink-0">
+                        <img id="question-img" src="" alt="Sketchbook Tool">
                     </div>
-                    <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2"></div>
                 </div>
-
-                <div id="feedback" class="hidden p-6 rounded-[2rem] text-center font-black text-2xl mt-8 animate-bounce border-4"></div>
             </div>
 
-            <!-- Result View -->
-            <div id="result-view" class="hidden bg-white p-12 rounded-[2.5rem] shadow-xl border border-slate-200 text-center flex-grow flex flex-col justify-center items-center">
-                <div class="text-9xl mb-10">🏅</div>
-                <h2 class="text-5xl font-black text-slate-900 mb-4">마스터 등극!</h2>
-                <div class="grid grid-cols-2 gap-8 mb-12 max-w-md w-full">
-                    <div class="bg-indigo-50 p-8 rounded-[2rem] border-2 border-indigo-100">
-                        <span id="final-score" class="text-5xl font-black text-indigo-600 block">0</span>
+            <!-- 3. Result View -->
+            <div id="result-view" class="hidden bg-white p-8 rounded-[2rem] shadow-xl border border-slate-200 text-center flex flex-col justify-center items-center h-full">
+                <div class="text-7xl mb-6">🏅</div>
+                <h2 class="text-4xl font-black text-slate-900 mb-2">도전 종료!</h2>
+                <div class="grid grid-cols-2 gap-4 mb-8 max-w-sm w-full">
+                    <div class="bg-indigo-50 p-6 rounded-[1.5rem] border-2 border-indigo-100">
+                        <span class="text-[8px] text-indigo-400 block uppercase font-black mb-1">Score</span>
+                        <span id="final-score" class="text-3xl font-black text-indigo-600 block leading-none">0</span>
                     </div>
-                    <div class="bg-slate-50 p-8 rounded-[2rem] border-2 border-slate-100">
-                        <span id="final-time" class="text-5xl font-black text-slate-800 block">0s</span>
+                    <div class="bg-slate-50 p-6 rounded-[1.5rem] border-2 border-slate-100">
+                        <span class="text-[8px] text-slate-400 block uppercase font-black mb-1">Time</span>
+                        <span id="final-time" class="text-3xl font-black text-slate-800 block leading-none">0s</span>
                     </div>
                 </div>
-                <button onclick="resetApp()" class="w-full max-w-sm bg-slate-900 text-white font-black py-6 rounded-2xl hover:bg-black transition-all text-2xl shadow-xl shadow-slate-200">다시 도전하기 🔄</button>
+                <button onclick="resetApp()" class="w-full max-w-xs bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-black transition-all text-xl">다시 하기 🔄</button>
             </div>
         </section>
     </main>
 
     <script>
-        // 퀴즈 데이터 세트
         const questions = [
             { header: "브러시 팔레트 옆에 스크롤의 기능은 무엇일까요?", img: "https://i.postimg.cc/QCYZr8sr/seukeulinsyas-2026-03-08-194419.png", o: ["브러시 크기 및 불투명도 조절", "브러시 종류 변경", "레이어 가시성 켜기/끄기", "캔버스 전체 저장"], a: 0 },
             { header: "이것의 기능은 무엇일까요?", img: "https://i.postimg.cc/nrPgP3KR/seukeulinsyas-2026-03-08-194246.png", o: ["선을 매끄럽게 자동 보정(예측 스트로크)", "선을 점선으로 그리기", "선의 색상을 자동으로 변경", "선 끝부분을 뭉툭하게 만들기"], a: 0 },
@@ -280,7 +302,7 @@
             const shuffled = q.o.map((text, i) => ({ text, isCorrect: i === q.a })).sort(() => Math.random() - 0.5);
             shuffled.forEach((opt) => {
                 const btn = document.createElement('button');
-                btn.className = "quiz-card bg-white border-2 border-slate-100 p-6 rounded-2xl text-left font-bold text-slate-700 shadow-sm transition-all text-lg";
+                btn.className = "quiz-card bg-white border-2 border-slate-100 p-4 rounded-xl text-left font-bold text-slate-700 shadow-sm transition-all text-base";
                 btn.textContent = opt.text;
                 btn.onclick = () => handleAnswer(opt.isCorrect, btn);
                 grid.appendChild(btn);
@@ -288,24 +310,31 @@
         }
 
         function handleAnswer(isCorrect, btn) {
-            const feedback = document.getElementById('feedback');
-            document.querySelectorAll('.quiz-card').forEach(b => b.disabled = true);
-            feedback.classList.remove('hidden');
+            const overlay = document.getElementById('feedback-overlay');
+            const fEmoji = document.getElementById('feedback-emoji');
+            const fText = document.getElementById('feedback-text');
+            
+            overlay.style.display = 'flex';
+
             if (isCorrect) {
                 score += 100;
-                feedback.className = "p-6 rounded-[2rem] text-center font-black text-2xl mt-8 animate-bounce bg-emerald-50 text-emerald-600 border-emerald-400 border-4";
-                feedback.textContent = "정답입니다! ✨";
+                fEmoji.textContent = "✨";
+                fText.textContent = "정답입니다!";
+                fText.className = "text-4xl font-black text-emerald-600";
                 btn.classList.add('border-emerald-500', 'bg-emerald-50');
             } else {
-                feedback.className = "p-6 rounded-[2rem] text-center font-black text-2xl mt-8 bg-rose-50 text-rose-600 border-rose-400 border-4";
-                feedback.textContent = "틀렸습니다! 😢";
+                fEmoji.textContent = "😢";
+                fText.textContent = "틀렸습니다!";
+                fText.className = "text-4xl font-black text-rose-600";
                 btn.classList.add('border-rose-500', 'bg-rose-50');
             }
+            
             document.getElementById('live-score').textContent = score;
             setTimeout(() => {
-                currentQIndex++; feedback.classList.add('hidden');
+                currentQIndex++; 
+                overlay.style.display = 'none';
                 if (currentQIndex < 10) loadQuestion(); else finishQuiz();
-            }, 1800);
+            }, 1400);
         }
 
         async function finishQuiz() {
@@ -323,12 +352,12 @@
             const noData = document.getElementById('no-data');
             if (!list) return;
             list.innerHTML = '';
-            if (window.appState.leaderboard.length === 0) { noData.classList.remove('hidden'); return; }
-            noData.classList.add('hidden');
+            if (window.appState.leaderboard.length === 0) { if (noData) noData.classList.remove('hidden'); return; }
+            if (noData) noData.classList.add('hidden');
             window.appState.leaderboard.forEach((item, index) => {
                 const div = document.createElement('div');
-                div.className = "flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm";
-                div.innerHTML = `<div class="flex items-center gap-4"><span class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 font-black text-xs">${index + 1}</span><span class="font-bold">${item.name}</span></div><div class="text-right"><div class="font-black text-indigo-600 text-sm">${item.score}점</div><div class="text-[9px] text-slate-400 font-bold uppercase">${item.time}s</div></div>`;
+                div.className = "flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm";
+                div.innerHTML = `<div class="flex items-center gap-3"><span class="w-6 h-6 flex items-center justify-center rounded bg-slate-100 text-slate-500 font-black text-[10px]">${index + 1}</span><span class="font-bold text-xs truncate max-w-[80px]">${item.name}</span></div><div class="text-right leading-tight"><div class="font-black text-indigo-600 text-[11px]">${item.score}점</div><div class="text-[8px] text-slate-400 font-bold uppercase">${item.time}s</div></div>`;
                 list.appendChild(div);
             });
         }
@@ -339,17 +368,11 @@
         window.confirmReset = function() { const pw = document.getElementById('admin-pw').value; window.resetLeaderboardData(pw); };
         function showToast(text, type) {
             const toast = document.getElementById('system-toast');
-            if (!toast) return;
             document.getElementById('toast-text').textContent = text;
-            toast.className = `fixed top-10 left-1/2 -translate-x-1/2 z-[110] px-8 py-3 rounded-full shadow-2xl font-bold text-sm ${type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`;
+            toast.className = `fixed top-10 left-1/2 -translate-x-1/2 z-[110] px-6 py-2 rounded-full shadow-xl font-bold text-xs ${type === 'success' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`;
             toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), 3000);
+            setTimeout(() => toast.classList.add('hidden'), 2000);
         }
     </script>
 </body>
 </html>
- 
-  
-   
-
- 
