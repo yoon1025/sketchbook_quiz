@@ -29,7 +29,7 @@
             ? JSON.parse(__firebase_config) 
             : myFirebaseConfig;
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sketchbook-master-final-v12';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sketchbook-master-final-v13';
 
         window.appState = {
             user: null,
@@ -114,30 +114,30 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
-        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; }
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #0f172a; scroll-behavior: smooth; }
         .quiz-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
         .quiz-card:hover:not(:disabled) { transform: translateY(-3px); border-color: #6366f1; background-color: #f5f3ff; }
         .modal-overlay { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); display: none; position: fixed; inset: 0; z-index: 100; align-items: center; justify-content: center; }
         .modal-overlay.active { display: flex; }
         
-        /* 이미지 영역 크기 원복 (더 크게) */
+        /* 이미지 영역 크기 복구 (이전의 시원한 크기) */
         .visual-box { width: 100%; height: 230px; background-color: #fff; border-radius: 1.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #e2e8f0; margin-bottom: 1.5rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05); }
         .visual-box img { max-height: 90%; max-width: 90%; object-fit: contain; }
         
-        /* 피드백 오버레이 스타일 (중앙 유지) */
+        /* 피드백 오버레이 (화면 중앙 유지) */
         #feedback-overlay {
             display: none;
             position: absolute;
             inset: 0;
-            background: rgba(255, 255, 255, 0.9);
-            z-index: 20;
+            background: rgba(255, 255, 255, 0.92);
+            z-index: 30;
             align-items: center;
             justify-content: center;
             border-radius: 2.5rem;
             animation: fadeIn 0.3s ease;
         }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .feedback-content { transform: scale(1.2); text-align: center; }
+        .feedback-content { transform: scale(1.3); text-align: center; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -183,7 +183,7 @@
                 </div>
                 <div class="p-5">
                     <div id="leaderboard-list" class="space-y-2"></div>
-                    <div id="no-data" class="hidden py-24 text-center text-slate-300 italic">기록을 기다리고 있습니다...</div>
+                    <div id="no-data" class="hidden py-24 text-center text-slate-300 italic text-sm">기록을 기다리고 있습니다...</div>
                 </div>
             </div>
         </section>
@@ -196,10 +196,9 @@
                 <div class="text-center mb-12">
                     <div class="w-24 h-24 bg-slate-900 text-white rounded-3xl flex items-center justify-center text-5xl mx-auto mb-8 shadow-2xl">⚡</div>
                     <h2 class="text-4xl font-black text-slate-900 tracking-tight">스케치북 마스터 퀴즈</h2>
-                    <p class="text-slate-500 mt-4 font-medium text-lg leading-relaxed text-center">디지털 드로잉 도구의 숨겨진 기능을 마스터하세요!<br>이미지를 자세히 보고 정답을 맞춰보세요.</p>
+                    <p class="text-slate-500 mt-4 font-medium text-lg leading-relaxed">디지털 드로잉 도구의 기능을 마스터하세요!<br>이미지를 자세히 보고 정답을 맞춰보세요.</p>
                 </div>
                 <div class="w-full max-w-sm space-y-6">
-                    <!-- 엔터키 지원을 위한 onkeyup 추가 -->
                     <input type="text" id="name-input" maxlength="10" placeholder="닉네임 입력" 
                            onkeyup="if(event.key === 'Enter') startQuiz()"
                            class="w-full px-8 py-5 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all text-xl font-bold placeholder:text-slate-300 text-center">
@@ -209,7 +208,7 @@
 
             <!-- 2. Quiz View -->
             <div id="quiz-view" class="hidden bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl border border-slate-200 flex-grow flex flex-col relative">
-                <!-- 피드백 오버레이 (중앙 배치) -->
+                <!-- 피드백 오버레이 (항목 선택 시 중앙에 표시) -->
                 <div id="feedback-overlay">
                     <div class="feedback-content">
                         <div id="feedback-emoji" class="text-8xl mb-4"></div>
@@ -231,9 +230,11 @@
                 <div class="flex-grow flex flex-col justify-center">
                     <h3 id="question-header" class="text-2xl md:text-3xl font-black leading-tight text-slate-800 mb-8 text-center"></h3>
                     <div class="visual-box shadow-inner">
-                        <img id="question-img" src="" alt="Sketchbook Interface Component">
+                        <img id="question-img" src="" alt="Sketchbook Interface">
                     </div>
-                    <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 버튼들이 동적으로 생성됩니다. -->
+                    </div>
                 </div>
             </div>
 
@@ -241,20 +242,18 @@
             <div id="result-view" class="hidden bg-white p-12 rounded-[2.5rem] shadow-xl border border-slate-200 text-center flex flex-col justify-center items-center h-full">
                 <div class="text-9xl mb-10">🏅</div>
                 <h2 class="text-5xl font-black text-slate-900 mb-4">마스터 등극!</h2>
-                <p class="text-slate-500 mb-12 font-bold text-xl leading-relaxed">수고하셨습니다!<br>실시간 명예의 전당에서 당신의 순위를 확인하세요.</p>
-                <div class="grid grid-cols-2 gap-8 mb-12 max-w-md w-full">
-                    <div class="bg-indigo-50 p-8 rounded-[2rem] border-2 border-indigo-100 text-center">
+                <div class="grid grid-cols-2 gap-8 mb-12 max-w-md w-full text-center">
+                    <div class="bg-indigo-50 p-8 rounded-[2rem] border-2 border-indigo-100">
                         <span class="text-[10px] text-indigo-400 block uppercase font-black mb-1">Score</span>
                         <span id="final-score" class="text-5xl font-black text-indigo-600 block">0</span>
                     </div>
-                    <div class="bg-slate-50 p-8 rounded-[2rem] border-2 border-slate-100 text-center">
+                    <div class="bg-slate-50 p-8 rounded-[2rem] border-2 border-slate-100">
                         <span class="text-[10px] text-slate-400 block uppercase font-black mb-1">Time</span>
                         <span id="final-time" class="text-5xl font-black text-slate-800 block">0s</span>
                     </div>
                 </div>
                 <button onclick="resetApp()" class="w-full max-w-sm bg-slate-900 text-white font-black py-6 rounded-2xl hover:bg-black transition-all text-2xl shadow-xl shadow-slate-200">다시 도전하기 🔄</button>
             </div>
-
         </section>
     </main>
 
@@ -300,14 +299,22 @@
         }
 
         function loadQuestion() {
+            // 새 문제를 불러올 때마다 스크롤을 맨 위로 올립니다.
+            window.scrollTo(0, 0);
+            
             const q = questions[currentQIndex];
             document.getElementById('q-progress').textContent = `Q ${currentQIndex + 1}/10`;
             document.getElementById('question-header').textContent = q.header;
             document.getElementById('question-img').src = q.img;
-            const grid = document.getElementById('options-grid'); grid.innerHTML = '';
+            
+            // 기존 선택 항목 초기화 (비활성화 상태 제거 및 새로 생성)
+            const grid = document.getElementById('options-grid'); 
+            grid.innerHTML = ''; 
+            
             const shuffled = q.o.map((text, i) => ({ text, isCorrect: i === q.a })).sort(() => Math.random() - 0.5);
             shuffled.forEach((opt) => {
                 const btn = document.createElement('button');
+                // 새로운 버튼 엘리먼트이므로 이전 선택 정보가 절대 남지 않습니다.
                 btn.className = "quiz-card bg-white border-2 border-slate-100 p-6 rounded-2xl text-left font-bold text-slate-700 shadow-sm transition-all text-xl";
                 btn.textContent = opt.text;
                 btn.onclick = () => handleAnswer(opt.isCorrect, btn);
@@ -321,6 +328,7 @@
             const fText = document.getElementById('feedback-text');
             
             overlay.style.display = 'flex';
+            // 클릭 즉시 모든 버튼 비활성화 (중복 클릭 방지)
             document.querySelectorAll('.quiz-card').forEach(b => b.disabled = true);
 
             if (isCorrect) {
@@ -360,7 +368,7 @@
             if (!list) return;
             list.innerHTML = '';
             if (window.appState.leaderboard.length === 0) { if (noData) noData.classList.remove('hidden'); return; }
-            if (noData) noData.classList.add('hidden');
+            noData.classList.add('hidden');
             window.appState.leaderboard.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = "flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm";
@@ -373,6 +381,7 @@
         window.openResetModal = function() { document.getElementById('reset-modal').classList.add('active'); };
         window.closeResetModal = function() { document.getElementById('reset-modal').classList.remove('active'); };
         window.confirmReset = function() { const pw = document.getElementById('admin-pw').value; window.resetLeaderboardData(pw); };
+        
         function showToast(text, type) {
             const toast = document.getElementById('system-toast');
             if (!toast) return;
